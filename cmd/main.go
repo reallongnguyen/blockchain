@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/gob"
+	"flag"
 	"fmt"
 	"log"
 	"math"
 	"math/big"
+	"os"
 	"strconv"
 	"time"
 
@@ -270,6 +272,11 @@ func (db *Database) GetBlock(hash []byte) (block *Block) {
 	return
 }
 
+// Close will close database connection
+func (db *Database) Close() {
+	db.db.Close()
+}
+
 // BlockchainIterator is iterator of blockchain
 type BlockchainIterator struct {
 	db          *Database
@@ -294,17 +301,77 @@ func (i *BlockchainIterator) HasNext() bool {
 	return len(i.currentHash) != 0
 }
 
-func main() {
-	db := NewDatabase()
-	db.Open("blockchain.db")
+// CLI is a struct that provide cmd interface to interact with blockchain
+type CLI struct {
+	blockchain *Blockchain
+}
 
-	blockchain := NewBlockChain(db)
-	// blockchain.AddBlock("Send one <3 to Tuyen")
-	// blockchain.AddBlock("Send one meme to Tuyen")
+// NewCLI is CLI constructor
+func NewCLI(blockchain *Blockchain) *CLI {
+	return &CLI{blockchain}
+}
 
-	bci := blockchain.Iterator()
+// Run is ...
+func (cli *CLI) Run() {
+	addBlockCmd := flag.NewFlagSet("add", flag.ExitOnError)
+	printChainCmd := flag.NewFlagSet("print", flag.ExitOnError)
+
+	addBlockData := addBlockCmd.String("data", "", "Block data")
+
+	switch os.Args[1] {
+	case "add":
+		addBlockCmd.Parse(os.Args[2:])
+	case "print":
+		printChainCmd.Parse(os.Args[2:])
+	default:
+		cli.PrintUsage()
+		os.Exit(0)
+	}
+
+	if addBlockCmd.Parsed() {
+		if *addBlockData == "" {
+			addBlockCmd.Usage()
+			os.Exit(1)
+		}
+
+		cli.blockchain.AddBlock(*addBlockData)
+	}
+
+	if printChainCmd.Parsed() {
+		cli.PrintChain()
+	}
+}
+
+// PrintUsage print instruction of cli
+func (cli *CLI) PrintUsage() {
+	fmt.Println("This is a tool for interact with blockchain.")
+	fmt.Println()
+	fmt.Println("Usage:")
+	fmt.Println()
+	fmt.Printf("\tblockchain <command> [arguments]\n")
+	fmt.Println()
+	fmt.Println("The commands are:")
+	fmt.Println()
+	fmt.Printf("\t%-9s %s\n", "add", "add a block into blockchain")
+	fmt.Printf("\t%-9s %s\n", "print", "print blocks in blockchain")
+}
+
+// PrintChain print data in blockchain
+func (cli *CLI) PrintChain() {
+	bci := cli.blockchain.Iterator()
 	for bci.HasNext() {
 		block := bci.Next()
 		block.Print()
 	}
+}
+
+func main() {
+	db := NewDatabase()
+	db.Open("blockchain.db")
+	defer db.Close()
+
+	blockchain := NewBlockChain(db)
+	cli := NewCLI(blockchain)
+
+	cli.Run()
 }
